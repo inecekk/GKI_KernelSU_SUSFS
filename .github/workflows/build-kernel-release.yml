@@ -33,9 +33,9 @@ jobs:
       REPO_OWNER: TheWildJames
       REPO_NAME: GKI_KernelSU_SUSFS
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_NAME: "*RIRI BUILD* GKI Kernels With KernelSU Next & SUSFS v1.5.3 *RIRI BUILD*"
+      RELEASE_NAME: "*RIRI BUILD* GKI Kernels With KernelSU Next & SUSFS v1.5.4 *RIRI BUILD*"
       RELEASE_NOTES: |
-        This release contains KernelSU Next and SUSFS v1.5.3
+        This release contains KernelSU Next and SUSFS v1.5.4
         
         Module: 
         -> https://github.com/sidex15/ksu_module_susfs
@@ -45,7 +45,7 @@ jobs:
         
         Features:
         [+] KernelSU-Next
-        [+] SUSFS v1.5.3
+        [+] SUSFS v1.5.4
         [+] Wireguard Support
         [+] Maphide LineageOS Detections
         [+] Futile Maphide for jit-zygote-cache Detections
