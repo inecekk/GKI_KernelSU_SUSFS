@@ -30,7 +30,7 @@ jobs:
         - build-kernel-a13-5-15
     if: ${{ inputs.make_release }}
     env:
-      REPO_OWNER: TheWildJames
+      REPO_OWNER: WildPlusKernel
       REPO_NAME: GKI_KernelSU_SUSFS
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_NAME: "*RIRI BUILD* GKI Kernels With KernelSU Next & SUSFS v1.5.4 *RIRI BUILD*"
