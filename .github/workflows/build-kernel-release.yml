@@ -198,10 +198,6 @@ jobs:
           # Store values in GitHub environment
           echo "KSU_REF=$KSU_REF" >> $GITHUB_ENV
           echo "KSU_URL=$KSU_URL" >> $GITHUB_ENV
-
-      - name: Append KernelSU-Next Reference to `RELEASE_NOTES`
-        run: |
-          echo "KernelSU-Next Version: [$KSU_REF]($KSU_URL)" >> $GITHUB_ENV
       
       - name: Get commit hashes and generate commit URLs
         run: |
@@ -230,12 +226,13 @@ jobs:
             fi
           done
 
-      - name: Append Commit Hashes & Links to `RELEASE_NOTES`
+      - name: Append Commit Hashes & Links to `RELEASE_NOTES` & Append KernelSU-Next Reference to `RELEASE_NOTES`
         run: |
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
           echo "$RELEASE_NOTES" >> $GITHUB_ENV
           echo "" >> $GITHUB_ENV
           echo "Commit Hashes & Links:" >> $GITHUB_ENV
+          echo "KernelSU-Next Version: [$KSU_REF]($KSU_URL)" >> $GITHUB_ENV
           echo "gki-android12-5.10: [$COMMIT_HASH_gki_android12_5_10]($COMMIT_URL_gki_android12_5_10)" >> $GITHUB_ENV
           echo "gki-android13-5.10: [$COMMIT_HASH_gki_android13_5_10]($COMMIT_URL_gki_android13_5_10)" >> $GITHUB_ENV
           echo "gki-android13-5.15: [$COMMIT_HASH_gki_android13_5_15]($COMMIT_URL_gki_android13_5_15)" >> $GITHUB_ENV
