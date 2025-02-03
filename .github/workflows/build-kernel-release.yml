@@ -189,6 +189,7 @@ jobs:
               echo "Error: Specified tag '$TAG' not found in KernelSU-Next" >&2
               exit 1
             fi
+          fi
 
       - name: Get commit hashes and generate commit URLs
         run: |
