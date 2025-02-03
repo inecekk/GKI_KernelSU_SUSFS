@@ -230,6 +230,7 @@ jobs:
         run: |
           echo "KernelSU-Next Version: [${{ env.KSU_REF }}](${{ env.KSU_URL }})" >> $GITHUB_ENV
 
+
       - name: Append Commit Hashes & Links to `RELEASE_NOTES`
         run: |
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
