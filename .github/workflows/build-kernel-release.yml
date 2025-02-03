@@ -182,18 +182,6 @@ jobs:
             fi
           done
 
-          else
-            # Fetch the specific tag for the custom branch
-            TAG=$BRANCH
-            if git ls-remote --tags $REPO_URL | grep -q "refs/tags/$TAG"; then
-              KSU_REF=$TAG
-              KSU_URL="https://github.com/rifsxd/KernelSU-Next/releases/tag/$TAG"
-            else
-              echo "Error: Specified tag '$TAG' not found in KernelSU-Next" >&2
-              exit 1
-            fi
-          fi
-
           # Output values
           echo "KernelSU-Next Reference: $KSU_REF"
           echo "KernelSU-Next URL: $KSU_URL"
