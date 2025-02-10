@@ -11,7 +11,7 @@ on:
         description: 'Do you want to create a release?'
         required: true
         type: boolean
-        default: false
+        default: true
       runner:
         description: "Choose runner"
         required: true
@@ -127,18 +127,18 @@ jobs:
     env:
       REPO_OWNER: WildPlusKernel
       REPO_NAME: GKI_KernelSU_SUSFS
-      GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-      RELEASE_NAME: "*TEST BUILD* GKI Kernels With KernelSU Next & SUSFS v1.5.5 *TEST BUILD*"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_NAME: "*TEST BUILD* GKI Kernels With KernelSU ${{ inputs.kernelsu_variant }} & SUSFS v1.5.5 *TEST BUILD*"
       RELEASE_NOTES: |
-        This release contains KernelSU Next and SUSFS v1.5.5
+        This release contains KernelSU ${{ inputs.kernelsu_variant }} and SUSFS v1.5.5
         
         Features:
-        [+] KernelSU
-        [+] SUSFS v1.5.5
-        [+] Wireguard Support
-        [+] Maphide LineageOS Detections
-        [+] Futile Maphide for jit-zygote-cache Detections
-        [+] Magic Mount Support
+        -> KernelSU-${{ inputs.kernelsu_variant }}
+        -> SUSFS ඞ v1.5.5 
+        -> Wireguard Support
+        -> Simple Maphide for LineageOS Detections
+        -> Futile Maphide for jit-zygote-cache Detections
+        -> Magic Mount Support
 
         Module: 
         -> https://github.com/sidex15/ksu_module_susfs
@@ -148,12 +148,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Determine the branch for KernelSU-Next
+      - name: Determine the branch for KernelSU-${{ inputs.kernelsu_variant }}
+        if: ${{ inputs.kernelsu_branch == 'Dev' }}
         run: |
           # Determine the branch based on user input
-          if [[ "${{ inputs.kernelsu_branch }}" == "Stable" ]]; then
-            BRANCH="Stable"
-          elif [[ "${{ inputs.kernelsu_branch }}" == "Dev" ]]; then
+          if [[ "${{ inputs.kernelsu_variant }}" == "Official" || "${{ inputs.kernelsu_variant }}" == "MKSU" ]]; then
+            BRANCH="main"
+          elif [[ "${{ inputs.kernelsu_variant }}" == "Next" ]]; then
             BRANCH="next"
           elif [[ "${{ inputs.kernelsu_branch }}" == "Other" && -n "${{ inputs.kernelsu_branch_other }}" ]]; then
             BRANCH="${{ inputs.kernelsu_branch_other }}"
@@ -165,7 +166,7 @@ jobs:
           # Store the selected branch in GITHUB_ENV
           echo "KSU_BRANCH=$BRANCH" >> $GITHUB_ENV
 
-      - name: Get commit hash or tag and generate URL for KernelSU-Next
+      - name: Get commit hash or tag and generate URL for KernelSU-${{ inputs.kernelsu_variant }}
         run: |
           if [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
             echo "This is the Official variant"
@@ -183,31 +184,29 @@ jobs:
             echo "Unknown variant"
           fi
           
-          BRANCH="${{ env.KSU_BRANCH }}"
-          
-          if [[ "$BRANCH" == "Stable" ||  ]]; then
+          if [[ "${{ inputs.kernelsu_branch }}" == "Stable" && "${{ inputs.kernelsu_variant }}" != "MKSU" ]]; then
             # Fetch the latest tag
             TAG=$(git ls-remote --tags --sort=-v:refname $REPO_URL | grep -o 'refs/tags/.*' | cut -d'/' -f3 | head -n1)
             if [[ -z "$TAG" ]]; then
-              echo "Error: Could not fetch latest tag for KernelSU" >&2
+              echo "Error: Could not fetch latest tag for Stable" >&2
               exit 1
             fi
             KSU_REF=$TAG
             KSU_URL="https://github.com/$REPO_URL2/releases/tag/$TAG"
 
-          elif [[ "$BRANCH" == "Dev" ]]; then
+          elif [[ "${{ inputs.kernelsu_branch }}" == "Dev" || "${{ inputs.kernelsu_variant }}" == "MKSU" ]]; then
             # Fetch the latest commit from "next" branch
-            COMMIT_HASH=$(git ls-remote $REPO_URL refs/heads/$BRANCH | awk '{ print $1 }')
+            COMMIT_HASH=$(git ls-remote $REPO_URL refs/heads/$KSU_BRANCH | awk '{ print $1 }')
             if [[ -z "$COMMIT_HASH" ]]; then
-              echo "Error: Could not fetch latest commit for KernelSU-Next Dev" >&2
+              echo "Error: Could not fetch latest commit for Dev" >&2
               exit 1
             fi
             KSU_REF=$COMMIT_HASH
             KSU_URL="https://github.com/$REPO_URL2/commit/$COMMIT_HASH"
 
           else
-            # Fetch the specific tag for the custom branch
-            TAG=$BRANCH
+            # Fetch the specific tag
+            TAG=${{ inputs.kernelsu_branch_other }}
             if git ls-remote --tags $REPO_URL | grep -q "refs/tags/$TAG"; then
               KSU_REF=$TAG
               KSU_URL="https://github.com/$REPO_URL2/releases/tag/$TAG"
@@ -258,21 +257,21 @@ jobs:
             echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
             echo "$RELEASE_NOTES" >> $GITHUB_ENV
             echo "Official Manager:" >> $GITHUB_ENV
-            echo "https://github.com/tiann/KernelSU" >> $GITHUB_ENV
+            echo "-> https://github.com/tiann/KernelSU" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
           elif [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
             echo "This is the Next variant"
             echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
             echo "$RELEASE_NOTES" >> $GITHUB_ENV
             echo "Next Manager:" >> $GITHUB_ENV
-            echo "https://github.com/rifsxd/KernelSU-Next" >> $GITHUB_ENV
+            echo "-> https://github.com/rifsxd/KernelSU-Next" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
           elif [ "${{ inputs.kernelsu_variant }}" == "MKSU" ]; then
             echo "This is the MKSU variant"
             echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
             echo "$RELEASE_NOTES" >> $GITHUB_ENV
             echo "MKSU Manager:" >> $GITHUB_ENV
-            echo "https://github.com/5ec1cff/KernelSU" >> $GITHUB_ENV
+            echo "-> https://github.com/5ec1cff/KernelSU" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
           else
             echo "Unknown variant"
@@ -285,7 +284,7 @@ jobs:
           echo "" >> $GITHUB_ENV
           echo "LTO: ${{ inputs.lto_type }}" >> $GITHUB_ENV
           echo "" >> $GITHUB_ENV
-          echo "Commit Hashes & Links:" >> $GITHUB_ENV
+          echo "Commit Hashes and Links:" >> $GITHUB_ENV
           echo "KernelSU:" >> $GITHUB_ENV
           echo "${{ inputs.kernelsu_variant }}-${{ inputs.kernelsu_branch }}: [$KSU_REF]($KSU_URL)" >> $GITHUB_ENV
           echo "SUSFS4KSU:" >> $GITHUB_ENV
@@ -299,14 +298,16 @@ jobs:
           
       # Get the Latest Tag from GitHub
       - name: Generate and Create New Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
             # Fetch the latest tag from GitHub (this is the latest tag based on the GitHub API)
             LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name')
             if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v1.5.4-0"
+              LATEST_TAG="v1.5.5-r0"
             fi
             
-            NEW_TAG=$(echo "$LATEST_TAG" | awk -F- '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-%d", $1, suffix}')
+            NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
     
             # Output the new tag to be used
             echo "New tag: $NEW_TAG"
@@ -352,3 +353,17 @@ jobs:
         run: |
           echo "GitHub release created with the following files:"
           ls ./downloaded-artifacts/**/*
+
+      - name: send telegram message on push
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+        run: |
+          curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d "chat_id=$TELEGRAM_CHAT_ID" \
+            -d "message_thread_id=$TELEGRAM_MESSAGE_THREAD_ID" \
+            -d "text=Latest release: 
+            https://github.com/WildPlusKernel/GKI_KernelSU_SUSFS/releases/tag/${{ env.NEW_TAG }}
+            
+            ${{ env.RELEASE_NOTES }}"

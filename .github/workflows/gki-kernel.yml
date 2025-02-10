@@ -1,7 +1,11 @@
 name: GKI Kernel Build
 
+permissions:
+  contents: write
+  actions: write
+
 on:
-  workflow_call:  # This allows this workflow to be called from another workflow
+  workflow_call: # This allows this workflow to be called from another workflow
     inputs:
       android_version:
         required: true
@@ -30,7 +34,7 @@ on:
       kernelsu_branch_other:
         required: false
         type: string
-      
+
 jobs:
   build-kernel-kernelsu-susfs:
     runs-on: ${{ inputs.runner }}
@@ -43,32 +47,56 @@ jobs:
           root-reserve-mb: 8192
           temp-reserve-mb: 2048
           swap-size-mb: 8192
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
+          remove-codeql: "true"
 
       - name: Clean up workspace
         run: rm -rf ${{ github.workspace }}/*
-        
+
       - name: Set CONFIG Environment Variable
         run: |
           # Set CONFIG dynamically based on inputs values
           CONFIG="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}"
-          
+
           # Set CONFIG as an environment variable for future steps
           echo "CONFIG=$CONFIG" >> $GITHUB_ENV
-          
+
           echo "CONFIG set to: $CONFIG"
 
-      - name: Download prebuilt toolchain
+      #- name: Download prebuilt toolchain
+      #  run: |
+      #    AOSP_MIRROR=https://android.googlesource.com
+      #    BRANCH=main-kernel-build-2024
+      #    git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools
+      #    git clone $AOSP_MIRROR/platform/system/tools/mkbootimg -b $BRANCH --depth 1 mkbootimg
+#
+#          echo "AVBTOOL=$GITHUB_WORKSPACE/kernel-build-tools/linux-x86/bin/avbtool" >> $GITHUB_ENV
+#          echo "MKBOOTIMG=$GITHUB_WORKSPACE/mkbootimg/mkbootimg.py" >> $GITHUB_ENV
+#          echo "UNPACK_BOOTIMG=$GITHUB_WORKSPACE/mkbootimg/unpack_bootimg.py" >> $GITHUB_ENV
+
+      - name: Cache prebuilt toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            kernel-build-tools
+            mkbootimg
+          key: toolchain-${{ runner.os }}-${{ hashFiles('**/workflow.yml') }}
+          restore-keys: |
+            toolchain-${{ runner.os }}-
+
+      - name: Download prebuilt toolchain (if cache is missing)
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           AOSP_MIRROR=https://android.googlesource.com
           BRANCH=main-kernel-build-2024
           git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools
           git clone $AOSP_MIRROR/platform/system/tools/mkbootimg -b $BRANCH --depth 1 mkbootimg
 
+      - name: Set environment variables
+        run: |
           echo "AVBTOOL=$GITHUB_WORKSPACE/kernel-build-tools/linux-x86/bin/avbtool" >> $GITHUB_ENV
           echo "MKBOOTIMG=$GITHUB_WORKSPACE/mkbootimg/mkbootimg.py" >> $GITHUB_ENV
           echo "UNPACK_BOOTIMG=$GITHUB_WORKSPACE/mkbootimg/unpack_bootimg.py" >> $GITHUB_ENV
@@ -84,7 +112,7 @@ jobs:
             echo "BOOT_SIGN_KEY is not set. Exiting..."
             exit 1
           fi
-          
+
       - name: Install Repo
         run: |
           # Install dependencies
@@ -96,7 +124,7 @@ jobs:
       - name: Clone AnyKernel3 and Other Dependencies
         run: |
           echo "Cloning AnyKernel3 and other dependencies..."
-    
+
           # Define the branch names using the inputs values
           ANYKERNEL_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}"
           SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
@@ -114,23 +142,23 @@ jobs:
         run: |
           # Set CONFIG dynamically based on inputs values
           CONFIG="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}"
-          
+
           # Set CONFIG as an environment variable for future steps
           echo "CONFIG=$CONFIG" >> $GITHUB_ENV
-          
+
           echo "CONFIG set to: $CONFIG"
-      
+
       - name: Initialize and Sync Kernel Source
         run: |
           echo "Creating folder for configuration: $CONFIG..."
           mkdir -p "$CONFIG"
           cd "$CONFIG"
-          
+
           # Initialize and sync kernel source
           echo "Initializing and syncing kernel source..."
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
           $REPO init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
-          
+
           REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
           DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
 
@@ -144,7 +172,7 @@ jobs:
           $REPO --version
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
-      - name: Determine the branch for kernelsu
+      - name: Determine the branch for KernelSU & MKSU
         if: ${{ inputs.kernelsu_variant == 'Official' || inputs.kernelsu_variant == 'MKSU' }}
         run: |
           if [[ "${{ inputs.kernelsu_branch }}" == "Stable" ]]; then
@@ -172,32 +200,48 @@ jobs:
             exit 1
           fi
 
-      - name: Add KernelSU
+      - name: Add KernelSU-Official
         if: ${{ inputs.kernelsu_variant == 'Official' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
-          
+
           echo "Adding KernelSU..."
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash $BRANCH
 
-      - name: Add KernelSU
+      - name: Add KernelSU-Next
         if: ${{ inputs.kernelsu_variant == 'Next' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
-          
+
           echo "Adding KernelSU..."
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash $BRANCH
 
-      - name: Apply SUSFS Patches KernelSU
-        if: ${{ inputs.kernelsu_variant == 'Official' || inputs.kernelsu_variant == 'MKSU' }}
+      - name: Add KernelSU-MKSU
+        if: ${{ inputs.kernelsu_variant == 'MKSU' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
-          
+
+          echo "Adding KernelSU..."
+          curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash $BRANCH
+
+          # Revert commit of remove pts_unix98_lookup_pre
+          cd KernelSU
+          git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 12063)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+
+      - name: Apply SUSFS Patches KernelSU
+        if: ${{ inputs.kernelsu_variant == 'Official' }}
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG"
+
           echo "Applying SUSFS patches..."
-          
+
           # Copy SUSFS patches
           cp ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
@@ -205,9 +249,9 @@ jobs:
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
           cd ./KernelSU
-          echo "Applying next SUSFS patches..."
-          patch -p1 --forward < 10_enable_susfs_for_ksu.patch          
-          
+          echo "Applying SUSFS patches..."
+          patch -p1 --forward < 10_enable_susfs_for_ksu.patch
+
           # Change to common directory and apply SUSFS patch
           cd ../common
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
@@ -217,9 +261,9 @@ jobs:
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
-          
+
           echo "Applying SUSFS patches..."
-          
+
           # Copy SUSFS patches
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
@@ -229,7 +273,33 @@ jobs:
           echo "Applying next SUSFS patches..."
           cp ../../kernel_patches/KernelSU-Next-Implement-SUSFS-v1.5.5-Universal.patch ./
           patch -p1 --forward < KernelSU-Next-Implement-SUSFS-v1.5.5-Universal.patch || true
+
+          # Change to common directory and apply SUSFS patch
+          cd ../common
+          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+
+      - name: Apply SUSFS Patches MKSU
+        if: ${{ inputs.kernelsu_variant == 'MKSU' }}
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG"
+
+          echo "Applying SUSFS patches..."
+
+          # Copy SUSFS patches
+          cp ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
+          cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
+          cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+
+          cd ./KernelSU
+          echo "Applying SUSFS patches..."
+          patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
           
+          echo "Applying mksu_susfs.patch"
+          cp ../../kernel_patches/mksu_susfs.patch ../KernelSU/
+          patch -p1 < mksu_susfs.patch
+
           # Change to common directory and apply SUSFS patch
           cd ../common
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
@@ -246,9 +316,9 @@ jobs:
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
-          
+
           echo "Adding configuration settings to gki_defconfig..."
-          
+
           # Add SUSFS configuration settings
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -267,13 +337,13 @@ jobs:
           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          
+
           # Add additional tmpfs config setting
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
 
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
-          
+
       - name: Build the Kernel
         run: |
           echo "Changing to configuration directory: $CONFIG..."
@@ -282,7 +352,7 @@ jobs:
           
           # Run perl command to modify UTS_VERSION
           perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2024"}' ./common/scripts/mkcompile_h
-          
+
           echo "Building the kernel..."
           if [ -f "build/build.sh" ]; then
             sed -i 's/-dirty//' ./common/scripts/setlocalversion
@@ -298,13 +368,13 @@ jobs:
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           mkdir bootimgs
-          
+
           echo "Creating bootimgs folder and copying images..."
           cp ./$CONFIG/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image ./bootimgs
           cp ./$CONFIG/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image.lz4 ./bootimgs
           cp ./$CONFIG/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image ./
           cp ./$CONFIG/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image.lz4 ./
-          
+
           # Create gzip of the Image file
           gzip -n -k -f -9 ./Image > ./Image.gz
 
@@ -313,13 +383,13 @@ jobs:
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           mkdir bootimgs
-          
+
           echo "Creating bootimgs folder and copying images..."
           cp ./$CONFIG/bazel-bin/common/kernel_aarch64/Image ./bootimgs
           cp ./$CONFIG/bazel-bin/common/kernel_aarch64/Image.lz4 ./bootimgs
           cp ./$CONFIG/bazel-bin/common/kernel_aarch64/Image ./
           cp ./$CONFIG/bazel-bin/common/kernel_aarch64/Image.lz4 ./
-          
+
           # Create gzip of the Image file
           gzip -n -k -f -9 ./Image > ./Image.gz
 
@@ -327,14 +397,14 @@ jobs:
         run: |
           echo "Creating zip files for all formats..."
           cd ./AnyKernel3
-          
+
           # Create and upload zip for each format
           ZIP_NAME="${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-AnyKernel3.zip"
           echo "Creating zip file: $ZIP_NAME..."
           mv ../Image ./Image
           zip -r "../$ZIP_NAME" ./*
           rm ./Image
-          
+
           ZIP_NAME="${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-AnyKernel3-lz4.zip"
           echo "Creating zip file: $ZIP_NAME..."
           mv ../Image.lz4 ./Image.lz4
@@ -355,7 +425,7 @@ jobs:
 
           GKI_URL=https://dl.google.com/android/gki/gki-certified-boot-android12-5.10-"${{ inputs.os_patch_level }}"_r1.zip
           FALLBACK_URL=https://dl.google.com/android/gki/gki-certified-boot-android12-5.10-2023-01_r1.zip
-          
+
           # Check if the GKI URL is available
           echo "Checking if GKI kernel URL is reachable: $GKI_URL"
           status=$(curl -sL -w "%{http_code}" "$GKI_URL" -o /dev/null)
@@ -375,23 +445,23 @@ jobs:
           echo "Unpacking boot.img..."
           FULL_PATH=$(pwd)/boot-5.10.img
           echo "Unpacking using: $FULL_PATH"
-          
+
           echo "Running unpack_bootimg.py..."
           $UNPACK_BOOTIMG --boot_img="$FULL_PATH"
-          
+
           echo "Building Image.gz"
           gzip -n -k -f -9 ./Image > ./Image.gz
-          
+
           echo "Building boot.img"
           $MKBOOTIMG --header_version 4 --kernel Image --output boot.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${{ inputs.os_patch_level }}"
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot.img
-          
+
           echo "Building boot-gz.img"
           $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${{ inputs.os_patch_level }}"
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot-gz.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-gz.img
-          
+
           echo "Building boot-lz4.img"
           $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${{ inputs.os_patch_level }}"
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
@@ -401,26 +471,25 @@ jobs:
         if: ${{ inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' }}
         run: |
           cd bootimgs
-          
+
           echo "Building Image.gz"
           gzip -n -k -f -9 ./Image > ./Image.gz
-          
+
           echo "Building boot.img"
           $MKBOOTIMG --header_version 4 --kernel Image --output boot.img
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot.img
-          
+
           echo "Building boot-gz.img"
           $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot-gz.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-gz.img
-          
+
           echo "Building boot-lz4.img"
           $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot-lz4.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-lz4.img
 
-          
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
